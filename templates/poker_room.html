@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Poker Room</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body {
+      background: #003300;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    .table {
+      margin: 30px auto;
+      background-color: #116530;
+      padding: 30px;
+      border-radius: 15px;
+      width: 80%;
+      box-shadow: 0 0 10px #000;
+    }
+    .cards {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 20px;
+    }
+    .card {
+      width: 60px;
+      height: 90px;
+      border-radius: 8px;
+      background-color: white;
+      color: black;
+      font-weight: bold;
+      font-size: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .actions button {
+      margin: 5px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .btn-fold { background-color: #c0392b; color: white; }
+    .btn-call { background-color: #f39c12; color: black; }
+    .btn-raise { background-color: #2980b9; color: white; }
+    .btn-check { background-color: #27ae60; color: white; }
+    .log {
+      margin-top: 20px;
+      background: #001f00;
+      padding: 15px;
+      max-height: 200px;
+      overflow-y: auto;
+      border-radius: 8px;
+      text-align: left;
+    }
+    .chips, .timer {
+      margin: 10px;
+      font-weight: bold;
+    }
+    .avatars {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      margin: 0 10px;
+      border: 2px solid white;
+    }
+    .spectator-mode {
+      margin-top: 10px;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Poker Game Room</h2>
+<p>Room ID: <strong id="room-id">{{ room_id }}</strong></p>
+<p class="spectator-mode" id="spectator-info"></p>
+
+<div class="table">
+  <div class="avatars">
+    <img src="/static/avatar1.png" alt="Player 1" class="avatar">
+    <img src="/static/avatar2.png" alt="Player 2" class="avatar">
+  </div>
+
+  <div class="chips">Your Chips: <span id="chip-balance">--</span></div>
+  <div class="timer">⏳ Move Timer: <span id="move-timer">30</span>s</div>
+
+  <div class="cards" id="community-cards">
+    <div class="card">?</div>
+    <div class="card">?</div>
+    <div class="card">?</div>
+    <div class="card">?</div>
+    <div class="card">?</div>
+  </div>
+
+  <div class="cards" id="player-cards">
+    <div class="card" id="card1">?</div>
+    <div class="card" id="card2">?</div>
+  </div>
+
+  <div class="actions">
+    <input type="number" id="raiseAmount" placeholder="Raise Amount" style="padding: 8px; margin-bottom: 8px;" />
+    <br/>
+    <button class="btn-fold" onclick="sendMove('fold')">Fold</button>
+    <button class="btn-call" onclick="sendMove('call')">Call</button>
+    <button class="btn-raise" onclick="sendMove('raise')">Raise</button>
+    <button class="btn-check" onclick="sendMove('check')">Check</button>
+  </div>
+
+  <div class="log" id="game-log">
+    <strong>Game Log:</strong><br>
+  </div>
+</div>
+
+<audio id="sound-move" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+<audio id="sound-win" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+
+<script>
+  const roomId = document.getElementById('room-id').textContent;
+  const socket = io();
+  let moveTime = 30;
+  let timerInterval = null;
+
+  socket.on('connect', () => {
+    socket.emit('joinRoom', { room: roomId });
+    log(`Joined room: ${roomId}`);
+  });
+
+  function startTimer() {
+    clearInterval(timerInterval);
+    moveTime = 30;
+    document.getElementById('move-timer').textContent = moveTime;
+    timerInterval = setInterval(() => {
+      moveTime--;
+      document.getElementById('move-timer').textContent = moveTime;
+      if (moveTime <= 0) {
+        clearInterval(timerInterval);
+        sendMove('fold');
+      }
+    }, 1000);
+  }
+
+  function sendMove(action) {
+    const move = { room: roomId, action: action };
+    if (action === 'raise') {
+      const amount = document.getElementById('raiseAmount').value;
+      move.amount = parseInt(amount) || 0;
+    }
+    socket.emit('playerMove', move);
+    log(`You chose to ${action.toUpperCase()}`);
+    playSound('sound-move');
+    startTimer();
+  }
+
+  function playSound(id) {
+    const audio = document.getElementById(id);
+    if (audio) audio.play();
+  }
+
+  socket.on('gameUpdate', (data) => {
+    log(data.message);
+
+    if (data.yourCards) {
+      document.getElementById('card1').innerText = data.yourCards[0];
+      document.getElementById('card2').innerText = data.yourCards[1];
+    }
+    if (data.chips !== undefined) {
+      document.getElementById('chip-balance').textContent = data.chips;
+    }
+    if (data.reset) {
+      resetBoard();
+    }
+    if (data.sound === 'win') {
+      playSound('sound-win');
+    }
+    if (data.isSpectator) {
+      document.getElementById('spectator-info').textContent = '👀 You are in Spectator Mode';
+    }
+    startTimer();
+  });
+
+  function log(message) {
+    const logBox = document.getElementById('game-log');
+    const entry = document.createElement('div');
+    entry.textContent = message;
+    logBox.appendChild(entry);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function resetBoard() {
+    document.getElementById('card1').innerText = '?';
+    document.getElementById('card2').innerText = '?';
+    document.getElementById('raiseAmount').value = '';
+    document.getElementById('community-cards').querySelectorAll('.card').forEach(c => c.innerText = '?');
+    log('🔄 New round starting...');
+  }
+</script>
+
+</body>
+</html>

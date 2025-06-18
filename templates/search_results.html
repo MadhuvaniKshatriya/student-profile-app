@@ -2,31 +2,59 @@
 <html>
 <head>
     <title>Search Results</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .invite-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 6px 12px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .invite-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-    <h2>Search Results for "{{ query }}"</h2>
+    <h2 style="text-align:center;">Search Results for "{{ query }}"</h2>
 
     {% if results %}
-        {% for user in results %}
-            <div class="result-card">
-                {% if user.profile_picture %}
-                    <img src="{{ url_for('uploaded_file', filename=user.profile_picture) }}" class="profile-pic" alt="Profile Picture">
-                {% endif %}
-                <p><strong>Name:</strong> {{ user.full_name }}</p>
-                <p><strong>Department:</strong> {{ user.department }}</p>
-                <p><strong>Marks:</strong> {{ user.marks }}</p>
-                {% if user.resume_file %}
-                    <p><a href="{{ url_for('uploaded_file', filename=user.resume_file) }}" target="_blank">📄 View Resume</a></p>
-                {% endif %}
-            </div>
+    <table>
+        <tr>
+            <th>Full Name</th>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Action</th>
+        </tr>
+        {% for result in results %}
+        <tr>
+            <td>{{ result.full_name }}</td>
+            <td>{{ result.email }}</td>
+            <td>{{ result.department }}</td>
+            <td>
+                <form action="{{ url_for('invite', user_id=result.id) }}" method="get">
+                    <button type="submit" class="invite-btn">Send Poker Invite</button>
+                </form>
+            </td>
+        </tr>
         {% endfor %}
+    </table>
     {% else %}
-        <p>No users found with that name.</p>
+        <p style="text-align:center;">No students found.</p>
     {% endif %}
 
-    <a href="{{ url_for('profile') }}">⬅ Back to Profile</a>
-</div>
+    <p style="text-align:center;"><a href="{{ url_for('profile') }}">Back to Profile</a></p>
 </body>
 </html>
