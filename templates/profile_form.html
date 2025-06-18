@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Profile</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h2>Complete Profile</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="text" name="full_name" placeholder="Full Name" required>
+        <input type="text" name="department" placeholder="Department" required>
+        <input type="text" name="marks" placeholder="Marks" required>
+        <input type="file" name="profile_picture" placeholder="Profile picture" required>
+        <input type="file" name="resume_file" placeholder="Resume" required>
+        <button type="submit">Submit</button>
+    </form>
+</div>
+</body>
+</html>

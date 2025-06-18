@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Your Profile</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h2>Your Profile</h2>
+
+    {% if user.profile_picture %}
+        <img src="{{ url_for('uploaded_file', filename=user.profile_picture) }}" alt="Profile Picture" class="profile-pic">
+    {% endif %}
+
+    {% if user.resume_file %}
+        <p><a href="{{ url_for('uploaded_file', filename=user.resume_file) }}" target="_blank">📄 View Resume</a></p>
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="text" name="full_name" value="{{ user.full_name or '' }}" placeholder="Full Name" required>
+        <input type="text" name="department" value="{{ user.department or '' }}" placeholder="Department" required>
+        <input type="text" name="marks" value="{{ user.marks or '' }}" placeholder="Marks" required>
+
+        <label>Update Profile Picture:</label>
+        <input type="file" name="profile_picture">
+        <label>Update Resume:</label>
+        <input type="file" name="resume_file">
+
+        <button type="submit">Update Profile</button>
+    </form>
+
+    <form action="{{ url_for('search') }}" method="GET" style="margin-top: 20px;">
+        <input type="text" name="q" placeholder="Search users by name">
+        <button type="submit">Search</button>
+    </form>
+
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+</body>
+</html>
