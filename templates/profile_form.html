@@ -11,8 +11,13 @@
         <input type="text" name="full_name" placeholder="Full Name" required>
         <input type="text" name="department" placeholder="Department" required>
         <input type="text" name="marks" placeholder="Marks" required>
-        <input type="file" name="profile_picture" placeholder="Profile picture" required>
-        <input type="file" name="resume_file" placeholder="Resume" required>
+
+        <label style="margin-top: 10px;">Add Profile Picture:</label>
+        <input type="file" name="profile_picture" accept=".jpg,.jpeg,.png">
+
+        <label style="margin-top: 10px;">Add Resume:</label>
+        <input type="file" name="resume_file" accept=".pdf,.doc,.docx">
+
         <button type="submit">Submit</button>
     </form>
 </div>
