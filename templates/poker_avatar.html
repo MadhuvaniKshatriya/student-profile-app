@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Texas Hold'em Poker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+      color: #fff;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      gap: 20px;
+      padding: 20px;
+      max-width: 1200px;
+      margin: auto;
+    }
+    .panel {
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 15px;
+      padding: 20px;
+    }
+    h2, h3 {
+      color: #f1c40f;
+      margin-bottom: 10px;
+    }
+    ul {
+      padding-left: 20px;
+      line-height: 1.6;
+    }
+    .avatar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .player-avatar {
+      text-align: center;
+    }
+    .avatar-img {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      transition: transform 0.4s ease-in-out;
+    }
+    .avatar-img.win {
+      animation: bounce 1s ease infinite;
+      box-shadow: 0 0 15px 5px gold;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+    }
+    .avatar-label {
+      margin-top: 5px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .avatar-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .avatar-grid img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    .avatar-grid img:hover {
+      transform: scale(1.2);
+      border-color: gold;
+    }
+    .avatar-grid img.selected {
+      border-color: gold;
+      box-shadow: 0 0 8px gold;
+    }
+    .cards-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0;
+    }
+    .card {
+      width: 60px;
+      height: 90px;
+      background: white;
+      color: black;
+      font-weight: bold;
+      font-size: 20px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .actions button {
+      background: #1abc9c;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    .actions button:hover {
+      background: #16a085;
+    }
+    .chat-box {
+      display: flex;
+      flex-direction: column;
+      height: 300px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px;
+      border-radius: 10px;
+    }
+    .chat-display {
+      flex: 1;
+      overflow-y: auto;
+      padding: 5px;
+      background: rgba(255,255,255,0.1);
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    .chat-input {
+      display: flex;
+    }
+    .chat-input input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 5px 0 0 5px;
+      border: none;
+    }
+    .chat-input button {
+      padding: 10px;
+      background: #3498db;
+      color: white;
+      border: none;
+      border-radius: 0 5px 5px 0;
+      cursor: pointer;
+    }
+    .end-button {
+      background: #e74c3c;
+      padding: 10px;
+      border: none;
+      color: white;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+    }
+    .end-button:hover {
+      background: #c0392b;
+    }
+    .game-section {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    #toggleInstructions {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #f39c12;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 8px 12px;
+      cursor: pointer;
+      z-index: 999;
+    }
+    #instructions {
+      display: none;
+      position: fixed;
+      top: 50px;
+      right: 10px;
+      background: #222;
+      padding: 10px;
+      border-radius: 8px;
+      width: 250px;
+    }
+  </style>
+</head>
+<body>
+    <!-- Instruction Toggle -->
+<button id="toggleInstructions">ℹ️</button>
+<div id="instructions">
+  <h3>🎯 How to Play</h3>
+  <ul>
+    <li>Each player gets 2 cards.</li>
+    <li>5 community cards are revealed (Flop, Turn, River).</li>
+    <li>Best 5-card hand wins.</li>
+    <li>Use betting strategies: fold, call, raise.</li>
+  </ul>
+</div>
+
+<!-- Game Setup Panel -->
+<div class="container" id="setupContainer">
+  <div class="panel profile-setup">
+    <h2>Welcome to Texas Hold'em Poker</h2>
+    <input type="text" id="playerName" placeholder="Enter your name">
+    <h3>Select Your Avatar</h3>
+    <div class="avatar-grid" id="avatarOptions">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Tiger" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Koala" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Lion" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Frog" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Wolf" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Cat" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Alien" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Dog" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Ghost" onclick="selectAvatar(this)">
+      <img src="https://api.dicebear.com/7.x/thumbs/svg?seed=Robot" onclick="selectAvatar(this)">
+    </div>
+    <button class="button" onclick="startGame()">Start Game</button>
+    <button class="end-button" onclick="endGame()">End Game</button>
+  </div>
+</div>
+
+<!-- Game Container -->
+<div class="container game-section" id="gameContainer">
+  <div class="panel" style="grid-column: span 3;">
+    <div class="avatar-row">
+      <div class="player-avatar">
+        <img src="" id="avatar1" class="avatar-img">
+        <p class="avatar-label">Player 1</p>
+      </div>
+      <div class="player-avatar">
+        <img src="" id="avatar2" class="avatar-img">
+        <p class="avatar-label">Player 2</p>
+      </div>
+    </div>
+
+    <h2>Game In Progress</h2>
+
+    <h3>Your Cards</h3>
+    <div id="playerCards" class="cards-row">
+      <div class="card">?</div>
+      <div class="card">?</div>
+    </div>
+
+    <h3>Community Cards</h3>
+    <div id="communityCards" class="cards-row">
+      <div class="card">?</div>
+      <div class="card">?</div>
+      <div class="card">?</div>
+      <div class="card">?</div>
+      <div class="card">?</div>
+    </div>
+
+    <div class="actions">
+      <input type="number" id="raiseAmount" placeholder="Raise Amount" style="width:100px">
+      <button onclick="sendMove('check')">Check</button>
+      <button onclick="sendMove('call')">Call</button>
+      <button onclick="sendMove('raise')">Raise</button>
+      <button onclick="sendMove('fold')">Fold</button>
+    </div>
+
+    <div class="chat-box">
+      <h3>💬 Chat</h3>
+      <div class="chat-display" id="chatDisplay"></div>
+      <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="Type your message">
+        <button onclick="sendChat()">Send</button>
+      </div>
+    </div>
+    
+    <button class="end-button" onclick="endGame()">End Game</button>
+  </div>
+</div>
+
+    <!-- Existing content remains -->
+  <script>
+    const socket = io();
+    const roomId = window.location.pathname.split("/").pop();
+    let selectedAvatar = null;
+    let playerName = "";
+
+    function selectAvatar(img) {
+      document.querySelectorAll('#avatarOptions img').forEach(i => i.classList.remove('selected'));
+      img.classList.add('selected');
+      selectedAvatar = img.src;
+    }
+
+    function startGame() {
+      const name = document.getElementById('playerName').value;
+      if (!name || !selectedAvatar) {
+        alert('Please enter your name and select an avatar.');
+        return;
+      }
+      playerName = name;
+      socket.emit('joinRoom', { room: roomId, name: name, avatar: selectedAvatar });
+      document.getElementById('setupContainer').style.display = 'none';
+      document.getElementById('gameContainer').style.display = 'grid';
+    }
+
+    function sendMove(action) {
+      const payload = { room: roomId, action };
+      if (action === 'raise') {
+        payload.amount = document.getElementById('raiseAmount').value;
+      }
+      socket.emit('playerMove', payload);
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chatInput');
+      const chatDisplay = document.getElementById('chatDisplay');
+      if (input.value.trim() !== '') {
+        const msg = document.createElement('div');
+        msg.textContent = `${playerName}: ${input.value}`;
+        msg.className = 'chat-msg';
+        chatDisplay.appendChild(msg);
+        input.value = '';
+        chatDisplay.scrollTop = chatDisplay.scrollHeight;
+      }
+    }
+
+    function endGame() {
+      socket.emit('leaveRoom', { room: roomId });
+      window.location.href = "/profile";
+    }
+
+    document.getElementById('toggleInstructions').onclick = () => {
+      const inst = document.getElementById('instructions');
+      inst.style.display = inst.style.display === 'block' ? 'none' : 'block';
+    };
+
+    socket.on('gameUpdate', (data) => {
+      if (data.yourCards) {
+        const [c1, c2] = data.yourCards;
+        const cards = document.getElementById('playerCards').children;
+        cards[0].innerText = c1;
+        cards[1].innerText = c2;
+      }
+
+      if (data.communityCards) {
+        const community = document.getElementById('communityCards').children;
+        data.communityCards.forEach((val, i) => {
+          if (community[i]) community[i].innerText = val;
+        });
+      }
+
+      if (data.avatars) {
+        document.getElementById('avatar1').src = data.avatars[0];
+        document.getElementById('avatar2').src = data.avatars[1];
+      }
+      if (data.playerNames) {
+        document.querySelector(".player-avatar:nth-child(1) .avatar-label").textContent = data.playerNames[0] || "Player 1";
+        document.querySelector(".player-avatar:nth-child(2) .avatar-label").textContent = data.playerNames[1] || "Player 2";
+      }
+      if (data.winnerId === socket.id) {
+        document.getElementById('avatar1').classList.add('win');
+      } else {
+        document.getElementById('avatar2').classList.add('win');
+      }
+      if (data.message) {
+        const chatDisplay = document.getElementById('chatDisplay');
+        const msg = document.createElement('div');
+        msg.textContent = `📝 ${data.message}`;
+        chatDisplay.appendChild(msg);
+        chatDisplay.scrollTop = chatDisplay.scrollHeight;
+      }
+    });
+  </script>
+</body>
+</html>

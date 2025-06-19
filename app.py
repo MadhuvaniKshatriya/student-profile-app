@@ -166,7 +166,7 @@ def invite(user_id):
 
 # Poker game logic remains same as earlier (WebSocket handlers etc)
 # ---- Poker Game WebSocket Logic ----
-
+games = {}
 rooms_state = {}
 
 def create_deck():
@@ -197,32 +197,54 @@ def evaluate_hand(cards):
 
 @socketio.on('joinRoom')
 def handle_join(data):
-    room = data['room']
-    player_id = request.sid
+    room = data.get('room')
+    name = data.get('name')
+    avatar = data.get('avatar')
+    sid = request.sid
     join_room(room)
 
-    if room not in rooms_state:
+    if room not in games:
         deck = create_deck()
         random.shuffle(deck)
-        rooms_state[room] = {
-            'deck': deck,
+        games[room] = {
             'players': [],
+            'deck': deck,
             'hands': {},
             'community': [],
             'chips': {},
-            'pot': 0,
+            'bets': {},
             'folded': set(),
-            'bets': {}
+            'pot': 0,
+            'avatars': {},   # ✅ NEW: Map socket IDs to avatar URLs
+            'names': {}      # Optional: track names if needed
         }
 
-    game = rooms_state[room]
-    if player_id not in game['players'] and len(game['players']) < 2:
-        game['players'].append(player_id)
-        game['hands'][player_id] = [game['deck'].pop(), game['deck'].pop()]
-        game['chips'][player_id] = 1000
-        game['bets'][player_id] = 0
-        emit('gameUpdate', {'message': 'You joined the table.', 'yourCards': game['hands'][player_id], 'chips': 1000}, room=player_id)
-        emit('gameUpdate', {'message': f"Player joined. Total: {len(game['players'])}"}, to=room)
+    game = games[room]
+
+    if sid not in game['players']:
+        game['players'].append(sid)
+        game['hands'][sid] = [game['deck'].pop(), game['deck'].pop()]
+        game['chips'][sid] = 1000
+        game['bets'][sid] = 0
+        game['avatars'][sid] = avatar
+        game['names'][sid] = name
+
+    if len(game['players']) == 2:
+        for pid in game['players']:
+            emit('gameUpdate', {
+                'yourCards': game['hands'][pid],
+                'communityCards': ['?', '?', '?', '?', '?'],
+                'avatars': [game['avatars'][game['players'][0]], game['avatars'][game['players'][1]]],
+                'playerNames': [game['names'][game['players'][0]], game['names'][game['players'][1]]],
+                'message': "Game started! Place your move."
+            }, room=pid)
+
+    else:
+        emit('gameUpdate', {
+            'message': "Waiting for second player to join...",
+            'communityCards': ['?', '?', '?', '?', '?']
+        }, room=sid)
+
 
 @socketio.on('playerMove')
 def handle_move(data):
@@ -230,9 +252,10 @@ def handle_move(data):
     action = data['action']
     amount = int(data.get('amount', 0))
     player_id = request.sid
-    game = rooms_state.get(room)
 
-    if not game or player_id not in game['players']: return
+    game = games.get(room)
+    if not game or player_id not in game['players']:
+        return
 
     if action == 'fold':
         game['folded'].add(player_id)
@@ -242,38 +265,58 @@ def handle_move(data):
         game['chips'][player_id] -= to_call
         game['pot'] += to_call
         game['bets'][player_id] += to_call
-        emit('gameUpdate', {'message': f"{player_id[:5]} calls {to_call}.", 'chips': game['chips'][player_id]}, to=room)
+        emit('gameUpdate', {
+            'message': f"{player_id[:5]} calls {to_call}.",
+            'chips': game['chips'][player_id]
+        }, to=room)
     elif action == 'raise':
+        if amount <= 0 or amount > game['chips'][player_id]:
+            emit('gameUpdate', {'message': "Invalid raise amount."}, room=player_id)
+            return
         game['chips'][player_id] -= amount
         game['pot'] += amount
         game['bets'][player_id] += amount
-        emit('gameUpdate', {'message': f"{player_id[:5]} raises {amount}.", 'chips': game['chips'][player_id]}, to=room)
+        emit('gameUpdate', {
+            'message': f"{player_id[:5]} raises {amount}.",
+            'chips': game['chips'][player_id]
+        }, to=room)
     elif action == 'check':
         emit('gameUpdate', {'message': f"{player_id[:5]} checks."}, to=room)
 
-    # Add community cards (simplified)
-    if len(game['community']) < 5:
-        if len(game['community']) == 0:
-            game['community'] = [game['deck'].pop() for _ in range(3)]
-        else:
-            game['community'].append(game['deck'].pop())
-        emit('gameUpdate', {'message': f"Community: {' '.join(game['community'])}"}, to=room)
+    # Progressive card reveal (Flop → Turn → River)
+    if len(game['community']) == 0:
+        game['community'] = [game['deck'].pop() for _ in range(3)]
+    elif len(game['community']) < 5:
+        game['community'].append(game['deck'].pop())
 
+    emit('gameUpdate', {
+        'communityCards': game['community'],
+        'message': f"Community Cards: {' '.join(game['community'])}"
+    }, to=room)
+
+    # If 5 community cards shown or 1 player folded → evaluate
     if len(game['community']) == 5 or len(game['folded']) == 1:
-        # Evaluate
         scores = {}
         for pid in game['players']:
-            if pid in game['folded']: continue
+            if pid in game['folded']:
+                continue
             cards = game['hands'][pid] + game['community']
-            scores[pid] = max([evaluate_hand(list(combo)) for combo in combinations(cards, 5)], key=lambda x: x)
+            scores[pid] = max(
+                [evaluate_hand(list(combo)) for combo in combinations(cards, 5)],
+                key=lambda x: x
+            )
         winner = max(scores.items(), key=lambda x: x[1])[0]
         game['chips'][winner] += game['pot']
+
         emit('gameUpdate', {
-            'message': f"🏆 {winner[:5]} wins {game['pot']} chips!",
+            'message': f"🏆 {game['names'][winner]} wins {game['pot']} chips!",
             'chips': game['chips'][winner],
-            'sound': 'win',
+            'avatars': [game['avatars'][p] for p in game['players']],
+            'playerNames': [game['names'][p] for p in game['players']],
+            'winnerId': winner,
             'reset': True
-        }, to=room)
+        }, room=room)
+
 
         # Reset round
         game['deck'] = create_deck()
@@ -284,9 +327,43 @@ def handle_move(data):
         game['folded'] = set()
         game['pot'] = 0
 
+@socketio.on('leaveRoom')
+def handle_leave(data):
+    room = data.get('room')
+    sid = request.sid
+
+    if room in games and sid in games[room]['players']:
+        games[room]['players'].remove(sid)
+
+        # Optional: Notify the other player
+        emit('gameUpdate', {
+            'message': f"{sid[:5]} has left the game. Game ended.",
+            'reset': True
+        }, room=room)
+
+        # Clean up the game if no players remain
+        if len(games[room]['players']) == 0:
+            del games[room]
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    for room, game in list(games.items()):
+        if sid in game['players']:
+            game['players'].remove(sid)
+
+            # Notify other player
+            emit('gameUpdate', {
+                'message': f"{sid[:5]} disconnected. Game ended.",
+                'reset': True
+            }, room=room)
+
+            # Clean up if room is now empty
+            if len(game['players']) == 0:
+                del games[room]
+
 @app.route('/poker/room/<room_id>')
 def poker_room(room_id):
-    return render_template('poker_room.html', room_id=room_id)
+    return render_template('poker_avatar.html', room_id=room_id)
 @app.route('/static/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
